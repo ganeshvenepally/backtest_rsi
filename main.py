@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import pandas_ta as ta
 import matplotlib.pyplot as plt
+import streamlit as st
 
 # Function to calculate RSI using pandas-ta
 def calculate_rsi(data, window=10):
@@ -12,10 +13,10 @@ def calculate_rsi(data, window=10):
 def backtest_rsi_strategy(tickers, start_date, end_date, rsi_threshold=32):
     results = []
     for ticker in tickers:
-        print(f"Fetching data for {ticker}...")
-        data = yf.download(ticker, start=start_date, end=end_date)
+        st.write(f"Fetching data for {ticker}...")
+        data = yf.download(ticker, start=start_date, end=end_date, progress=False)
         if data.empty:
-            print(f"No data for {ticker}. Skipping...")
+            st.write(f"No data for {ticker}. Skipping...")
             continue
 
         data['RSI'] = calculate_rsi(data)
@@ -37,25 +38,36 @@ def backtest_rsi_strategy(tickers, start_date, end_date, rsi_threshold=32):
             'Trades': data['Buy'].sum()
         })
 
-        # Print or save the trades for the ticker if needed
-        print(f"{ticker} Total Return: {total_return:.2%}, Trades: {data['Buy'].sum()}")
+        # Display individual ticker results
+        st.write(f"{ticker} Total Return: {total_return:.2%}, Trades: {data['Buy'].sum()}")
 
     return pd.DataFrame(results)
 
-# Parameters
-tickers = ["AAPL", "MSFT", "TSLA"]  # List of stocks or ETFs
-start_date = "2020-01-01"
-end_date = "2023-12-31"
+# Streamlit app
+def main():
+    st.title("RSI Backtesting Strategy")
 
-# Run the backtest
-results = backtest_rsi_strategy(tickers, start_date, end_date)
+    # User inputs
+    tickers = st.text_input("Enter tickers (comma-separated):", "AAPL, MSFT, TSLA").split(",")
+    start_date = st.date_input("Select start date:", value=pd.to_datetime("2020-01-01"))
+    end_date = st.date_input("Select end date:", value=pd.to_datetime("2023-12-31"))
+    rsi_threshold = st.slider("RSI Threshold:", min_value=10, max_value=50, value=32)
 
-# Display results
-print("\nBacktest Results:")
-print(results)
+    if st.button("Run Backtest"):
+        results = backtest_rsi_strategy(tickers, start_date, end_date, rsi_threshold)
 
-# Visualize results
-results.set_index('Ticker')['Total_Return'].plot(kind='bar', title='Total Return by Ticker')
-plt.xlabel('Ticker')
-plt.ylabel('Total Return')
-plt.show()
+        # Display results
+        st.subheader("Backtest Results")
+        st.dataframe(results)
+
+        # Plot results
+        st.subheader("Total Return by Ticker")
+        if not results.empty:
+            fig, ax = plt.subplots()
+            results.set_index('Ticker')['Total_Return'].plot(kind='bar', ax=ax, title='Total Return by Ticker')
+            ax.set_xlabel('Ticker')
+            ax.set_ylabel('Total Return')
+            st.pyplot(fig)
+
+if __name__ == "__main__":
+    main()
