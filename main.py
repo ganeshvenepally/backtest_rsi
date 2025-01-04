@@ -1,74 +1,61 @@
 import yfinance as yf
 import pandas as pd
-import quantstats as qs
-from datetime import datetime, timedelta
-import warnings
-warnings.filterwarnings('ignore')
+import numpy as np
+import pandas_ta as ta
+import matplotlib.pyplot as plt
 
-def fetch_data(symbol, start_date, end_date):
-    """
-    Fetch data from Yahoo Finance
-    """
-    data = yf.download(symbol, 
-                      start=start_date,
-                      end=end_date,
-                      progress=False)
-    return data
+# Function to calculate RSI using pandas-ta
+def calculate_rsi(data, window=10):
+    return ta.rsi(data['Close'], length=window)
 
-def calculate_returns(data):
-    """
-    Calculate daily returns from price data
-    """
-    returns = data['Adj Close'].pct_change()
-    returns = returns.dropna()
-    return returns
+# Backtest function
+def backtest_rsi_strategy(tickers, start_date, end_date, rsi_threshold=32):
+    results = []
+    for ticker in tickers:
+        print(f"Fetching data for {ticker}...")
+        data = yf.download(ticker, start=start_date, end=end_date)
+        if data.empty:
+            print(f"No data for {ticker}. Skipping...")
+            continue
 
-def generate_full_report(strategy_returns, benchmark_returns, report_name='quantstats_report.html'):
-    """
-    Generate comprehensive QuantStats report
-    """
-    # Enable extending pandas functionality
-    qs.extend_pandas()
-    
-    # Generate HTML report
-    qs.reports.html(returns=strategy_returns,
-                   benchmark=benchmark_returns,
-                   output=report_name,
-                   title='Trading Strategy Analysis')
+        data['RSI'] = calculate_rsi(data)
+        data['Signal'] = (data['RSI'] < rsi_threshold)
 
-def main():
-    # Set parameters
-    start_date = '2020-01-01'
-    end_date = datetime.now().strftime('%Y-%m-%d')
-    strategy_symbol = 'AAPL'  # Replace with your strategy returns
-    benchmark_symbol = 'SPY'  # Benchmark (S&P 500 ETF)
-    
-    print(f"Fetching data for {strategy_symbol} and {benchmark_symbol}...")
-    
-    # Fetch data
-    strategy_data = fetch_data(strategy_symbol, start_date, end_date)
-    benchmark_data = fetch_data(benchmark_symbol, start_date, end_date)
-    
-    # Calculate returns
-    strategy_returns = calculate_returns(strategy_data)
-    benchmark_returns = calculate_returns(benchmark_data)
-    
-    print("Generating QuantStats report...")
-    
-    # Generate report
-    report_name = f'quantstats_report_{strategy_symbol}_{datetime.now().strftime("%Y%m%d")}.html'
-    generate_full_report(strategy_returns, benchmark_returns, report_name)
-    
-    print(f"Report generated successfully: {report_name}")
-    
-    # Print some basic statistics
-    print("\nBasic Performance Metrics:")
-    print(f"Total Return: {(strategy_returns + 1).prod() - 1:.2%}")
-    print(f"Annual Volatility: {strategy_returns.std() * (252 ** 0.5):.2%}")
-    print(f"Sharpe Ratio: {qs.stats.sharpe(strategy_returns):.2f}")
-    print(f"Max Drawdown: {qs.stats.max_drawdown(strategy_returns):.2%}")
-    print(f"Calmar Ratio: {qs.stats.calmar(strategy_returns):.2f}")
-    print(f"Sortino Ratio: {qs.stats.sortino(strategy_returns):.2f}")
+        # Generate buy and sell signals
+        data['Buy'] = data['Signal'] & ~data['Signal'].shift(1, fill_value=False)
+        data['Sell'] = data['Buy'].shift(1, fill_value=False)
 
-if __name__ == "__main__":
-    main()
+        # Calculate performance
+        data['Daily_Return'] = data['Close'].pct_change()
+        data['Strategy_Return'] = 0
+        data.loc[data['Buy'], 'Strategy_Return'] = data['Daily_Return'].shift(-1)
+
+        total_return = data['Strategy_Return'].sum()
+        results.append({
+            'Ticker': ticker,
+            'Total_Return': total_return,
+            'Trades': data['Buy'].sum()
+        })
+
+        # Print or save the trades for the ticker if needed
+        print(f"{ticker} Total Return: {total_return:.2%}, Trades: {data['Buy'].sum()}")
+
+    return pd.DataFrame(results)
+
+# Parameters
+tickers = ["AAPL", "MSFT", "TSLA"]  # List of stocks or ETFs
+start_date = "2020-01-01"
+end_date = "2023-12-31"
+
+# Run the backtest
+results = backtest_rsi_strategy(tickers, start_date, end_date)
+
+# Display results
+print("\nBacktest Results:")
+print(results)
+
+# Visualize results
+results.set_index('Ticker')['Total_Return'].plot(kind='bar', title='Total Return by Ticker')
+plt.xlabel('Ticker')
+plt.ylabel('Total Return')
+plt.show()
