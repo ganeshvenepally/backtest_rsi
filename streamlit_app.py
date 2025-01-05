@@ -51,30 +51,42 @@ def fetch_data(ticker, start_date, end_date):
         return data
     return pd.DataFrame()
 
-def calculate_signals(df, rsi_entry, rsi_exit):
-    """Calculate RSI and generate entry/exit signals."""
+def calculate_signals(df, rsi_entry, rsi_exit, is_us_stock=True):
+    """Calculate RSI and generate entry/exit signals with SMA condition for US stocks."""
     # Calculate RSI with a 10-day length
     df['RSI_10'] = ta.rsi(df['Adj Close'], length=10)
+    
+    # Calculate SMAs for US stocks
+    if is_us_stock:
+        df['SMA_50'] = ta.sma(df['Adj Close'], length=50)
+        df['SMA_150'] = ta.sma(df['Adj Close'], length=150)
     
     # Initialize signals and positions
     df['Signal'] = 0  # 0: no signal, 1: buy, -1: sell
     df['Position'] = 0  # 0: no position, 1: in position
-    
-    # Calculate entry signals (RSI <= rsi_entry threshold)
-    df.loc[df['RSI_10'] <= rsi_entry, 'Signal'] = 1
-    
-    # Calculate exit signals (RSI >= rsi_exit threshold)
-    df.loc[df['RSI_10'] >= rsi_exit, 'Signal'] = -1
     
     # Generate positions
     position = 0
     positions = []
     
     for i in range(len(df)):
-        if df['Signal'].iloc[i] == 1 and position == 0:
-            position = 1  # Enter position
-        elif position == 1 and df['Signal'].iloc[i] == -1:
-            position = 0  # Exit position
+        if is_us_stock:
+            # For US stocks, check both RSI and SMA conditions for entry
+            sma_50 = df['SMA_50'].iloc[i]
+            sma_150 = df['SMA_150'].iloc[i]
+            sma_condition = not pd.isna(sma_50) and not pd.isna(sma_150) and sma_50 > sma_150
+            
+            if df['RSI_10'].iloc[i] <= rsi_entry and sma_condition and position == 0:
+                position = 1  # Enter position
+            elif position == 1 and (df['RSI_10'].iloc[i] >= rsi_exit or not sma_condition):
+                position = 0  # Exit position on either RSI or SMA condition
+        else:
+            # For non-US stocks, only check RSI
+            if df['RSI_10'].iloc[i] <= rsi_entry and position == 0:
+                position = 1  # Enter position
+            elif position == 1 and df['RSI_10'].iloc[i] >= rsi_exit:
+                position = 0  # Exit position
+                
         positions.append(position)
     
     df['Position'] = positions
@@ -220,11 +232,18 @@ def main():
             if df.empty:
                 st.error(f"No data available for {ticker}")
                 return
+            
+            # Determine if it's a US stock
+            is_us_stock = market == "US"
                 
-            df = calculate_signals(df, rsi_entry, rsi_exit)
+            df = calculate_signals(df, rsi_entry, rsi_exit, is_us_stock)
             df = calculate_returns(df)
             trades_df = analyze_trades(df, market)
             
+            # Display SMA condition info for US stocks
+            if is_us_stock:
+                st.info("For US stocks, positions are only entered and maintained when the 50-day SMA is above the 150-day SMA. Positions will exit if either the RSI reaches the exit threshold or if the 50-day SMA falls below the 150-day SMA.")
+                            
             # Display results
             st.subheader("Strategy Performance")
             col1, col2, col3, col4, col5 = st.columns(5)
