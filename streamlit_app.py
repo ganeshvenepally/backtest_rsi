@@ -52,18 +52,18 @@ def fetch_data(ticker, start_date, end_date):
     return pd.DataFrame()
 
 def calculate_signals(df, rsi_entry, rsi_exit):
-    """Calculate RSI and generate entry/exit signals"""
-    # Calculate RSI
+    """Calculate RSI and generate entry/exit signals."""
+    # Calculate RSI with a 10-day length
     df['RSI_10'] = ta.rsi(df['Adj Close'], length=10)
     
-    # Initialize signals
+    # Initialize signals and positions
     df['Signal'] = 0  # 0: no signal, 1: buy, -1: sell
     df['Position'] = 0  # 0: no position, 1: in position
     
-    # Calculate entry signals (RSI <= 32)
+    # Calculate entry signals (RSI <= rsi_entry threshold)
     df.loc[df['RSI_10'] <= rsi_entry, 'Signal'] = 1
     
-    # Calculate exit signals (RSI >= 79)
+    # Calculate exit signals (RSI >= rsi_exit threshold)
     df.loc[df['RSI_10'] >= rsi_exit, 'Signal'] = -1
     
     # Generate positions
@@ -78,15 +78,14 @@ def calculate_signals(df, rsi_entry, rsi_exit):
         positions.append(position)
     
     df['Position'] = positions
-    
     return df
 
 def calculate_returns(df):
-    """Calculate returns and statistics for the strategy"""
+    """Calculate returns and statistics for the strategy."""
     # Calculate daily returns
     df['Daily_Return'] = df['Adj Close'].pct_change()
     
-    # Calculate strategy returns (only when we have a position)
+    # Calculate strategy returns (only when in position)
     df['Strategy_Return'] = df['Daily_Return'] * df['Position'].shift(1)
     
     # Calculate cumulative returns
@@ -96,10 +95,9 @@ def calculate_returns(df):
     df['Peak'] = df['Cumulative_Return'].expanding().max()
     df['Drawdown'] = (df['Cumulative_Return'] - df['Peak']) / df['Peak'] * 100
     
-    # Calculate trade details
+    # Mark trade entries and exits
     df['Trade_Entry'] = df['Position'].diff() == 1
     df['Trade_Exit'] = df['Position'].diff() == -1
-    
     return df
 
 def analyze_trades(df, market):
@@ -184,24 +182,26 @@ def main():
     st.title("RSI Entry/Exit Strategy Backtester (US & Indian Markets)")
 
     # Input parameters
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     
+    # User input for market type
     with col1:
         market = st.selectbox("Select Market", ["US", "India"])
         assets = US_ASSETS if market == "US" else INDIAN_ASSETS
-        
+    
+    # User input for asset selection
     with col2:
         ticker = st.selectbox("Select Asset", assets)
     
+    # User input for the end date of analysis
     with col3:
         end_date = st.date_input("End Date", date.today())
-        
+    
+    # User input for lookback period in months
     with col4:
-        lookback_months = st.slider("Lookback Period (Months)", 
-                                  min_value=1, 
-                                  max_value=60, 
-                                  value=12)
-
+        lookback_months = st.slider("Lookback Period (Months)", 1, 60, 12)
+    
+    # User input for RSI thresholds
     with col5:
         rsi_entry = st.number_input("RSI Entry Threshold", value=32, step=1)
         rsi_exit = st.number_input("RSI Exit Threshold", value=79, step=1)
