@@ -25,18 +25,8 @@ INDIAN_ASSETS = [
     "BAJAJ-AUTO.NS", "HEALTHIETF.NS", "^NSEBANK", "0P0000ON3O.BO"
 ]
 
-def get_exchange_calendar(market):
-    """Get the appropriate market calendar."""
-    if market == "US":
-        return mcal.get_calendar('NYSE')
-    elif market == "INDIA":
-        return mcal.get_calendar('NSE')
-    return None
-
 def fetch_data(ticker, start_date, end_date):
     """Fetch data for a single ticker."""
-    market = "INDIA" if (".NS" in ticker or ".BO" in ticker) else "US"
-    calendar = get_exchange_calendar(market)
     data = yf.download(ticker, start=start_date, end=end_date, progress=False)
     return data if not data.empty else pd.DataFrame()
 
@@ -47,7 +37,6 @@ def calculate_signals(df, trend_data, market):
     df['Position'] = 0
 
     if market == "US":
-        # Apply trend conditions for US stocks
         trend_condition = (
             trend_data['QQQ_sma_50'] > trend_data['QQQ_sma_150'] and
             trend_data['SPY_current_price'] > trend_data['SPY_sma_200'] and
@@ -58,15 +47,12 @@ def calculate_signals(df, trend_data, market):
         ) | (
             df['Adj Close'] > df['Adj Close'].rolling(window=200).mean()
         )
-
         df.loc[trend_condition & stock_condition & (df['RSI_10'] <= 32), 'Signal'] = 1
         df.loc[~trend_condition | ~stock_condition, 'Signal'] = -1
     else:
-        # Apply only RSI conditions for Indian stocks
         df.loc[df['RSI_10'] <= 32, 'Signal'] = 1
         df.loc[df['RSI_10'] >= 79, 'Signal'] = -1
 
-    # Generate positions
     position = 0
     positions = []
     for i in range(len(df)):
@@ -90,7 +76,7 @@ def calculate_returns(df):
     return df
 
 def analyze_trades(df, market):
-    """Analyze individual trades and calculate statistics."""
+    """Analyze individual trades and calculate detailed trade statistics."""
     trades = []
     entry_price = None
     entry_date = None
@@ -102,34 +88,43 @@ def analyze_trades(df, market):
             entry_date = date
         elif row['Trade_Exit'] and entry_price is not None:
             exit_price = row['Adj Close']
+            trade_period = df.loc[entry_date:date]
+            holding_period = (date - entry_date).days / 30.44
+            trade_drawdown = ((trade_period['Adj Close'] - trade_period['Adj Close'].expanding().max()) /
+                              trade_period['Adj Close'].expanding().max() * 100).min()
+
             trades.append({
                 'Entry_Date': entry_date,
                 'Exit_Date': date,
                 'Entry_Price': f"{currency_symbol}{entry_price:.2f}",
                 'Exit_Price': f"{currency_symbol}{exit_price:.2f}",
                 'Return': (exit_price - entry_price) / entry_price * 100,
+                'Max_Trade_Drawdown': trade_drawdown,
+                'Holding_Period_Months': holding_period
             })
             entry_price = None
 
     if entry_price is not None:
         last_date = df.index[-1]
         last_price = df['Adj Close'].iloc[-1]
+        holding_period = (last_date - entry_date).days / 30.44
         trades.append({
             'Entry_Date': entry_date,
             'Exit_Date': "Open",
             'Entry_Price': f"{currency_symbol}{entry_price:.2f}",
             'Exit_Price': f"{currency_symbol}{last_price:.2f}",
             'Return': (last_price - entry_price) / entry_price * 100,
+            'Max_Trade_Drawdown': None,
+            'Holding_Period_Months': holding_period
         })
 
     return pd.DataFrame(trades)
 
 def main():
     st.set_page_config(layout="wide")
-    st.title("RSI & Trend-Based Strategy Backtester (US & Indian Markets)")
+    st.title("RSI & Trend-Based Strategy Backtester")
 
-    # User input
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         market = st.selectbox("Select Market", ["US", "India"])
         assets = US_ASSETS if market == "US" else INDIAN_ASSETS
@@ -137,8 +132,8 @@ def main():
         ticker = st.selectbox("Select Asset", assets)
     with col3:
         end_date = st.date_input("End Date", date.today())
-
-    lookback_months = st.slider("Lookback Period (Months)", 1, 60, 12)
+    with col4:
+        lookback_months = st.slider("Lookback Period (Months)", 1, 60, 12)
 
     if st.button("Run Analysis"):
         start_date = pd.to_datetime(end_date) - pd.DateOffset(months=lookback_months)
@@ -148,7 +143,6 @@ def main():
             st.error(f"No data available for {ticker}")
             return
 
-        # Fetch trend data for US market
         trend_data = {}
         if market == "US":
             trend_data = {
@@ -160,17 +154,31 @@ def main():
                 "QQQ_sma_200": yf.download("QQQ", start=start_date, end=end_date)['Adj Close'].rolling(window=200).mean().iloc[-1],
             }
 
-        # Calculate signals, returns, and trades
         df = calculate_signals(df, trend_data, market)
         df = calculate_returns(df)
         trades_df = analyze_trades(df, market)
 
-        # Display results
-        st.subheader("Trade Results")
-        st.dataframe(trades_df)
+        st.subheader("Strategy Performance")
+        col1, col2, col3, col4 = st.columns(4)
+        total_return = (df['Cumulative_Return'].iloc[-1] - 1) * 100
+        num_trades = len(trades_df)
+        win_rate = (trades_df['Return'] > 0).mean() * 100 if not trades_df.empty else 0
+        avg_return = trades_df['Return'].mean() if not trades_df.empty else 0
+        max_drawdown = df['Drawdown'].min()
+        avg_holding = trades_df['Holding_Period_Months'].mean() if not trades_df.empty else 0
 
-        csv = convert_df_to_csv(trades_df)
-        st.download_button("Download Trades Data", data=csv, file_name="trades.csv", mime="text/csv")
+        col1.metric("Total Return", f"{total_return:.2f}%")
+        col2.metric("Max Drawdown", f"{max_drawdown:.2f}%")
+        col3.metric("Win Rate", f"{win_rate:.2f}%")
+        col4.metric("Avg Holding (Months)", f"{avg_holding:.1f}")
+
+        if not trades_df.empty:
+            st.subheader("Individual Trades")
+            st.dataframe(trades_df)
+            trades_csv = convert_df_to_csv(trades_df)
+            st.download_button("Download Trades Data", data=trades_csv, file_name=f'{ticker}_trades.csv', mime="text/csv")
+        else:
+            st.info("No trades were generated during the selected period.")
 
 if __name__ == "__main__":
     main()
