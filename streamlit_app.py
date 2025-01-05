@@ -218,7 +218,7 @@ def main():
                 return
                 
             df = calculate_signals(df, rsi_entry, rsi_exit)
-            df = calculate_returns(df, rsi_entry, rsi_exit)
+            df = calculate_returns(df)
             trades_df = analyze_trades(df, market)
             
             # Display results
