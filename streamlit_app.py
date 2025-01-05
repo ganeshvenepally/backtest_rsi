@@ -61,7 +61,7 @@ def calculate_signals(df):
     df['Position'] = 0  # 0: no position, 1: in position
     
     # Calculate entry signals (RSI <= 32)
-    df.loc[df['RSI_10'] <= 32, 'Signal'] = 1
+    df.loc[df['RSI_10'] <= 28, 'Signal'] = 1
     
     # Calculate exit signals (RSI >= 79)
     df.loc[df['RSI_10'] >= 79, 'Signal'] = -1
