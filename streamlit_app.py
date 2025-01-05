@@ -51,7 +51,7 @@ def fetch_data(ticker, start_date, end_date):
         return data
     return pd.DataFrame()
 
-def calculate_signals(df):
+def calculate_signals(df, rsi_entry, rsi_exit):
     """Calculate RSI and generate entry/exit signals"""
     # Calculate RSI
     df['RSI_10'] = ta.rsi(df['Adj Close'], length=10)
@@ -61,10 +61,10 @@ def calculate_signals(df):
     df['Position'] = 0  # 0: no position, 1: in position
     
     # Calculate entry signals (RSI <= 32)
-    df.loc[df['RSI_10'] <= 28, 'Signal'] = 1
+    df.loc[df['RSI_10'] <= rsi_entry, 'Signal'] = 1
     
     # Calculate exit signals (RSI >= 79)
-    df.loc[df['RSI_10'] >= 79, 'Signal'] = -1
+    df.loc[df['RSI_10'] >= rsi_exit, 'Signal'] = -1
     
     # Generate positions
     position = 0
@@ -202,6 +202,10 @@ def main():
                                   max_value=60, 
                                   value=12)
 
+    with col5:
+        rsi_entry = st.number_input("RSI Entry Threshold", value=32, step=1)
+        rsi_exit = st.number_input("RSI Exit Threshold", value=79, step=1)
+        
     if st.button("Run Analysis"):
         start_date = pd.to_datetime(end_date) - pd.DateOffset(months=lookback_months)
         
@@ -213,8 +217,8 @@ def main():
                 st.error(f"No data available for {ticker}")
                 return
                 
-            df = calculate_signals(df)
-            df = calculate_returns(df)
+            df = calculate_signals(df, rsi_entry, rsi_exit)
+            df = calculate_returns(df, rsi_entry, rsi_exit)
             trades_df = analyze_trades(df, market)
             
             # Display results
