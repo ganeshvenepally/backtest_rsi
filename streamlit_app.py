@@ -15,7 +15,7 @@ def convert_df_to_csv(df):
 # Define the assets with both US and Indian stocks
 US_ASSETS = [
     "SPY", "QQQ", "TQQQ", "UPRO", "SOXL", "SCHD",
-    "AAPL", "MSFT", "GOOGL", "GOOG", "AMZN", "META", "NFLX", "NVDA", "TSLA"
+    "AAPL", "MSFT", "GOOGL", "GOOG", "AMZN", "META", "NFLX", "NVDA", "TSLA" , "AVUV"
 ]
 # Add .NS suffix for NSE stocks and .BO for BSE stocks
 INDIAN_ASSETS = [
@@ -61,7 +61,7 @@ def calculate_signals(df):
     df['Position'] = 0  # 0: no position, 1: in position
     
     # Calculate entry signals (RSI <= 32)
-    df.loc[df['RSI_10'] <= 32, 'Signal'] = 1
+    df.loc[df['RSI_10'] <= 24, 'Signal'] = 1
     
     # Calculate exit signals (RSI >= 79)
     df.loc[df['RSI_10'] >= 79, 'Signal'] = -1
