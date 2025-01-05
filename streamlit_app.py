@@ -51,8 +51,41 @@ def fetch_data(ticker, start_date, end_date):
         return data
     return pd.DataFrame()
 
-def calculate_signals(df, rsi_entry, rsi_exit, is_us_stock=True):
-    """Calculate RSI and generate entry/exit signals with SMA condition for US stocks."""
+def fetch_market_data(start_date, end_date):
+    """Fetch SPY and QQQ data for market condition checking"""
+    market_data = {}
+    for ticker in ['SPY', 'QQQ']:
+        data = yf.download(ticker, start=start_date, end=end_date, progress=False)
+        # Calculate SMAs
+        data['SMA_50'] = ta.sma(data['Adj Close'], length=50)
+        data['SMA_150'] = ta.sma(data['Adj Close'], length=150)
+        data['SMA_200'] = ta.sma(data['Adj Close'], length=200)
+        market_data[ticker] = data
+    return market_data
+
+def check_market_conditions(market_data, date):
+    """Check if market conditions are favorable based on SPY and QQQ"""
+    spy_data = market_data['SPY'].loc[:date]
+    qqq_data = market_data['QQQ'].loc[:date]
+    
+    if len(spy_data) == 0 or len(qqq_data) == 0:
+        return False
+        
+    spy_last = spy_data.iloc[-1]
+    qqq_last = qqq_data.iloc[-1]
+    
+    conditions = [
+        spy_last['SMA_50'] > spy_last['SMA_150'],  # SPY 50 SMA > 150 SMA
+        qqq_last['SMA_50'] > qqq_last['SMA_150'],  # QQQ 50 SMA > 150 SMA
+        spy_last['Adj Close'] > spy_last['SMA_200'],  # SPY price > 200 SMA
+        qqq_last['Adj Close'] > qqq_last['SMA_200']   # QQQ price > 200 SMA
+    ]
+    
+    return all(conditions)
+
+
+def calculate_signals(df, market_data, rsi_entry, rsi_exit, is_us_stock=True):
+    """Calculate RSI and generate entry/exit signals with market conditions for US stocks."""
     # Calculate RSI with a 10-day length
     df['RSI_10'] = ta.rsi(df['Adj Close'], length=10)
     
@@ -70,16 +103,28 @@ def calculate_signals(df, rsi_entry, rsi_exit, is_us_stock=True):
     positions = []
     
     for i in range(len(df)):
+        current_date = df.index[i]
+        
         if is_us_stock:
-            # For US stocks, check both RSI and SMA conditions for entry
+            # Check stock-specific SMA condition
             sma_50 = df['SMA_50'].iloc[i]
             sma_150 = df['SMA_150'].iloc[i]
-            sma_condition = not pd.isna(sma_50) and not pd.isna(sma_150) and sma_50 > sma_150
+            stock_sma_condition = not pd.isna(sma_50) and not pd.isna(sma_150) and sma_50 > sma_150
             
-            if df['RSI_10'].iloc[i] <= rsi_entry and sma_condition and position == 0:
+            # Check market conditions
+            market_condition = check_market_conditions(market_data, current_date)
+            
+            # Combined conditions for US stocks
+            if (df['RSI_10'].iloc[i] <= rsi_entry and 
+                stock_sma_condition and 
+                market_condition and 
+                position == 0):
                 position = 1  # Enter position
-            elif position == 1 and (df['RSI_10'].iloc[i] >= rsi_exit or not sma_condition):
-                position = 0  # Exit position on either RSI or SMA condition
+            elif position == 1 and (
+                df['RSI_10'].iloc[i] >= rsi_exit or 
+                not stock_sma_condition or 
+                not market_condition):
+                position = 0  # Exit position
         else:
             # For non-US stocks, only check RSI
             if df['RSI_10'].iloc[i] <= rsi_entry and position == 0:
@@ -226,7 +271,7 @@ def main():
         start_date = pd.to_datetime(end_date) - pd.DateOffset(months=lookback_months)
         
         with st.spinner('Analyzing data...'):
-            # Fetch and process data
+            # Fetch stock data
             df = fetch_data(ticker, start_date, end_date)
             
             if df.empty:
@@ -235,15 +280,30 @@ def main():
             
             # Determine if it's a US stock
             is_us_stock = market == "US"
+            
+            # Fetch market data for US stocks
+            market_data = {}
+            if is_us_stock:
+                market_data = fetch_market_data(start_date, end_date)
                 
-            df = calculate_signals(df, rsi_entry, rsi_exit, is_us_stock)
+            df = calculate_signals(df, market_data, rsi_entry, rsi_exit, is_us_stock)
             df = calculate_returns(df)
             trades_df = analyze_trades(df, market)
             
-            # Display SMA condition info for US stocks
+            # Display market conditions info for US stocks
             if is_us_stock:
-                st.info("For US stocks, positions are only entered and maintained when the 50-day SMA is above the 150-day SMA. Positions will exit if either the RSI reaches the exit threshold or if the 50-day SMA falls below the 150-day SMA.")
-                            
+                st.info("""
+                For US stocks, the following conditions must be met for entry and maintaining positions:
+                - Stock's 50-day SMA above 150-day SMA
+                - SPY's 50-day SMA above 150-day SMA
+                - QQQ's 50-day SMA above 150-day SMA
+                - SPY price above its 200-day SMA
+                - QQQ price above its 200-day SMA
+                - RSI below entry threshold
+                
+                Positions will exit if any of these conditions are no longer met or if RSI reaches the exit threshold.
+                """)
+            
             # Display results
             st.subheader("Strategy Performance")
             col1, col2, col3, col4, col5 = st.columns(5)
