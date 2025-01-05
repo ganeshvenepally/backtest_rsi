@@ -107,37 +107,37 @@ def analyze_trades(df, market):
     trades = []
     entry_price = None
     entry_date = None
-    
+
     currency_symbol = "₹" if market == "INDIA" else "$"
-    
+
     for date, row in df.iterrows():
         if row['Trade_Entry']:
             entry_price = row['Adj Close']
             entry_date = date
         elif row['Trade_Exit'] and entry_price is not None:
             exit_price = row['Adj Close']
-            
+
             # Get trade period data
             trade_period = df.loc[entry_date:date]
-            
+
             # Calculate trade metrics
             trade_return = (exit_price - entry_price) / entry_price * 100
             holding_period = (date - entry_date).days / 30.44  # Convert days to months
-            
+
             # Calculate trade-specific drawdown
             trade_prices = trade_period['Adj Close']
             trade_peak = trade_prices.expanding().max()
             trade_drawdown = ((trade_prices - trade_peak) / trade_peak * 100)
             max_drawdown = trade_drawdown.min()
-            
+
             # Calculate high and low prices during trade
             high_price = trade_prices.max()
             low_price = trade_prices.min()
-            
+
             # Calculate unrealized return at worst point
             worst_return = (low_price - entry_price) / entry_price * 100
             best_return = (high_price - entry_price) / entry_price * 100
-            
+
             trades.append({
                 'Entry_Date': entry_date,
                 'Exit_Date': date,
@@ -154,7 +154,29 @@ def analyze_trades(df, market):
                 'Exit_RSI': row['RSI_10']
             })
             entry_price = None
-    
+
+    # Add last open position if it exists
+    if entry_price is not None:
+        last_date = df.index[-1]
+        last_price = df['Adj Close'].iloc[-1]
+        holding_period = (last_date - entry_date).days / 30.44  # Convert days to months
+
+        trades.append({
+            'Entry_Date': entry_date,
+            'Exit_Date': "Open",
+            'Entry_Price': f"{currency_symbol}{entry_price:.2f}",
+            'Exit_Price': f"{currency_symbol}{last_price:.2f}",
+            'High_Price': f"{currency_symbol}{df['Adj Close'][entry_date:].max():.2f}",
+            'Low_Price': f"{currency_symbol}{df['Adj Close'][entry_date:].min():.2f}",
+            'Return': (last_price - entry_price) / entry_price * 100,
+            'Max_Trade_Drawdown': ((df['Adj Close'][entry_date:].min() - entry_price) / entry_price * 100),
+            'Worst_Return': ((df['Adj Close'][entry_date:].min() - entry_price) / entry_price * 100),
+            'Best_Return': ((df['Adj Close'][entry_date:].max() - entry_price) / entry_price * 100),
+            'Holding_Period': holding_period,
+            'Entry_RSI': df.loc[entry_date, 'RSI_10'],
+            'Exit_RSI': None  # No exit RSI for open positions
+        })
+
     return pd.DataFrame(trades)
 
 def main():
