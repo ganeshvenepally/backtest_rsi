@@ -82,22 +82,26 @@ def calculate_signals(df, rsi_entry, rsi_exit):
 
 def calculate_returns(df):
     """Calculate returns and statistics for the strategy."""
+    # Ensure the DataFrame is modified explicitly by working on a copy
+    df = df.copy()
+
     # Calculate daily returns
-    df['Daily_Return'] = df['Adj Close'].pct_change()
+    df.loc[:, 'Daily_Return'] = df['Adj Close'].pct_change()
     
     # Calculate strategy returns (only when in position)
-    df['Strategy_Return'] = df['Daily_Return'] * df['Position'].shift(1)
+    df.loc[:, 'Strategy_Return'] = df['Daily_Return'] * df['Position'].shift(1)
     
     # Calculate cumulative returns
-    df['Cumulative_Return'] = (1 + df['Strategy_Return']).cumprod()
+    df.loc[:, 'Cumulative_Return'] = (1 + df['Strategy_Return']).cumprod()
     
     # Calculate drawdown
-    df['Peak'] = df['Cumulative_Return'].expanding().max()
-    df['Drawdown'] = (df['Cumulative_Return'] - df['Peak']) / df['Peak'] * 100
+    df.loc[:, 'Peak'] = df['Cumulative_Return'].expanding().max()
+    df.loc[:, 'Drawdown'] = (df['Cumulative_Return'] - df['Peak']) / df['Peak'] * 100
     
     # Mark trade entries and exits
-    df['Trade_Entry'] = df['Position'].diff() == 1
-    df['Trade_Exit'] = df['Position'].diff() == -1
+    df.loc[:, 'Trade_Entry'] = df['Position'].diff() == 1
+    df.loc[:, 'Trade_Exit'] = df['Position'].diff() == -1
+    
     return df
 
 def analyze_trades(df, market):
