@@ -15,7 +15,7 @@ def convert_df_to_csv(df):
 # Define the assets with both US and Indian stocks
 US_ASSETS = [
     "SPY", "QQQ", "TQQQ", "UPRO", "SOXL", "SCHD",
-    "AAPL", "MSFT", "GOOGL", "GOOG", "AMZN", "META", "NFLX", "NVDA", "TSLA" , "AVUV"
+    "AAPL", "MSFT", "GOOGL", "GOOG", "AMZN", "META", "NFLX", "NVDA", "TSLA" , "AVUV", "ANET" , "ORCL"
 ]
 # Add .NS suffix for NSE stocks and .BO for BSE stocks
 INDIAN_ASSETS = [
