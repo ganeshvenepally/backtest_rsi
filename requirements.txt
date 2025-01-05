@@ -3,3 +3,5 @@ yfinance==0.2.33
 pandas==2.1.4
 pandas_ta==0.3.14b
 pandas_market_calendars==4.3.1
+setuptools
+numpy>=1.23.5
