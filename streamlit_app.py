@@ -7,16 +7,17 @@ from datetime import date
 import io
 
 def convert_df_to_csv(df):
+    """Convert DataFrame to CSV."""
     csv_buffer = io.StringIO()
     df.to_csv(csv_buffer, index=True)
     csv_buffer.seek(0)
     return csv_buffer.getvalue()
 
+# Asset lists
 US_ASSETS = [
     "SPY", "QQQ", "TQQQ", "UPRO", "SOXL", "SCHD",
     "AAPL", "MSFT", "GOOGL", "GOOG", "AMZN", "META", "NFLX", "NVDA", "TSLA"
 ]
-
 INDIAN_ASSETS = [
     "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS",
     "HINDUNILVR.NS", "ITC.NS", "SBIN.NS", "BHARTIARTL.NS", "KOTAKBANK.NS", "KPITTECH.NS",
@@ -24,21 +25,33 @@ INDIAN_ASSETS = [
     "BAJAJ-AUTO.NS", "HEALTHIETF.NS", "^NSEBANK", "0P0000ON3O.BO"
 ]
 
+def get_exchange_calendar(market):
+    """Get the appropriate market calendar."""
+    if market == "US":
+        return mcal.get_calendar('NYSE')
+    elif market == "INDIA":
+        return mcal.get_calendar('NSE')
+    return None
+
 def fetch_data(ticker, start_date, end_date):
+    """Fetch data for a single ticker."""
     market = "INDIA" if (".NS" in ticker or ".BO" in ticker) else "US"
+    calendar = get_exchange_calendar(market)
     data = yf.download(ticker, start=start_date, end=end_date, progress=False)
     return data if not data.empty else pd.DataFrame()
 
-def calculate_signals(df, data, market):
+def calculate_signals(df, trend_data, market):
+    """Calculate RSI and generate entry/exit signals based on trend conditions."""
     df['RSI_10'] = ta.rsi(df['Adj Close'], length=10)
     df['Signal'] = 0
     df['Position'] = 0
 
     if market == "US":
+        # Apply trend conditions for US stocks
         trend_condition = (
-            data['QQQ_sma_50'] > data['QQQ_sma_150'] and
-            data['SPY_current_price'] > data['SPY_sma_200'] and
-            data['QQQ_current_price'] > data['QQQ_sma_200']
+            trend_data['QQQ_sma_50'] > trend_data['QQQ_sma_150'] and
+            trend_data['SPY_current_price'] > trend_data['SPY_sma_200'] and
+            trend_data['QQQ_current_price'] > trend_data['QQQ_sma_200']
         )
         stock_condition = (
             df['Adj Close'].rolling(window=50).mean() > df['Adj Close'].rolling(window=150).mean()
@@ -48,11 +61,12 @@ def calculate_signals(df, data, market):
 
         df.loc[trend_condition & stock_condition & (df['RSI_10'] <= 32), 'Signal'] = 1
         df.loc[~trend_condition | ~stock_condition, 'Signal'] = -1
-
     else:
+        # Apply only RSI conditions for Indian stocks
         df.loc[df['RSI_10'] <= 32, 'Signal'] = 1
         df.loc[df['RSI_10'] >= 79, 'Signal'] = -1
 
+    # Generate positions
     position = 0
     positions = []
     for i in range(len(df)):
@@ -65,6 +79,7 @@ def calculate_signals(df, data, market):
     return df
 
 def calculate_returns(df):
+    """Calculate returns and statistics for the strategy."""
     df['Daily_Return'] = df['Adj Close'].pct_change()
     df['Strategy_Return'] = df['Daily_Return'] * df['Position'].shift(1)
     df['Cumulative_Return'] = (1 + df['Strategy_Return']).cumprod()
@@ -75,6 +90,7 @@ def calculate_returns(df):
     return df
 
 def analyze_trades(df, market):
+    """Analyze individual trades and calculate statistics."""
     trades = []
     entry_price = None
     entry_date = None
@@ -110,8 +126,9 @@ def analyze_trades(df, market):
 
 def main():
     st.set_page_config(layout="wide")
-    st.title("RSI Entry/Exit Strategy with Trend Conditions")
+    st.title("RSI & Trend-Based Strategy Backtester (US & Indian Markets)")
 
+    # User input
     col1, col2, col3 = st.columns(3)
     with col1:
         market = st.selectbox("Select Market", ["US", "India"])
@@ -131,19 +148,24 @@ def main():
             st.error(f"No data available for {ticker}")
             return
 
-        trend_data = {
-            "QQQ_sma_50": yf.download("QQQ", start=start_date, end=end_date)['Adj Close'].rolling(window=50).mean().iloc[-1],
-            "QQQ_sma_150": yf.download("QQQ", start=start_date, end=end_date)['Adj Close'].rolling(window=150).mean().iloc[-1],
-            "SPY_current_price": yf.download("SPY", start=start_date, end=end_date)['Adj Close'].iloc[-1],
-            "SPY_sma_200": yf.download("SPY", start=start_date, end=end_date)['Adj Close'].rolling(window=200).mean().iloc[-1],
-            "QQQ_current_price": yf.download("QQQ", start=start_date, end=end_date)['Adj Close'].iloc[-1],
-            "QQQ_sma_200": yf.download("QQQ", start=start_date, end=end_date)['Adj Close'].rolling(window=200).mean().iloc[-1],
-        }
+        # Fetch trend data for US market
+        trend_data = {}
+        if market == "US":
+            trend_data = {
+                "QQQ_sma_50": yf.download("QQQ", start=start_date, end=end_date)['Adj Close'].rolling(window=50).mean().iloc[-1],
+                "QQQ_sma_150": yf.download("QQQ", start=start_date, end=end_date)['Adj Close'].rolling(window=150).mean().iloc[-1],
+                "SPY_current_price": yf.download("SPY", start=start_date, end=end_date)['Adj Close'].iloc[-1],
+                "SPY_sma_200": yf.download("SPY", start=start_date, end=end_date)['Adj Close'].rolling(window=200).mean().iloc[-1],
+                "QQQ_current_price": yf.download("QQQ", start=start_date, end=end_date)['Adj Close'].iloc[-1],
+                "QQQ_sma_200": yf.download("QQQ", start=start_date, end=end_date)['Adj Close'].rolling(window=200).mean().iloc[-1],
+            }
 
+        # Calculate signals, returns, and trades
         df = calculate_signals(df, trend_data, market)
         df = calculate_returns(df)
         trades_df = analyze_trades(df, market)
 
+        # Display results
         st.subheader("Trade Results")
         st.dataframe(trades_df)
 
