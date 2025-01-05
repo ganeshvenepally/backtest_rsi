@@ -223,7 +223,7 @@ def main():
             
             # Display results
             st.subheader("Strategy Performance")
-            col1, col2, col3, col4 = st.columns(4)
+            col1, col2, col3, col4, col5 = st.columns(5)
             
             total_return = (df['Cumulative_Return'].iloc[-1] - 1) * 100
             num_trades = len(trades_df)
