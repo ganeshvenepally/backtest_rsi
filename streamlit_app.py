@@ -19,7 +19,8 @@ US_ASSETS = [
     "NFLX", "NVDA", "TSLA", "AVUV", "ANET", "ORCL",
     "PANW", "COST", "BRK.B", "UNH", "JNJ", "JPM",
     "V", "PG", "MA", "XOM", "HD", "CVX", "ABBV",
-    "PFE", "DIS", "CMCSA", "PEP", "CSCO", "MRK"
+    "PFE", "DIS", "CMCSA", "PEP", "CSCO", "MRK",
+    "IGV"
 ]
 
 # Add .NS suffix for NSE stocks and .BO for BSE stocks
