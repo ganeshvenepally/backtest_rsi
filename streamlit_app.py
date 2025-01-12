@@ -20,6 +20,7 @@ US_ASSETS = [
     "PANW", "COST", "BRK.B", "UNH", "JNJ", "JPM",
     "V", "PG", "MA", "XOM", "HD", "CVX", "ABBV",
     "PFE", "DIS", "CMCSA", "PEP", "CSCO", "MRK",
+    "INDA"
 ]
 
 # Add .NS suffix for NSE stocks and .BO for BSE stocks
