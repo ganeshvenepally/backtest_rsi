@@ -288,7 +288,7 @@ def main():
         end_date = st.date_input("End Date", date.today())
     
     with col4:
-        lookback_months = st.slider("Lookback Period (Months)", 1, 60, 12)
+        lookback_months = st.slider("Lookback Period (Months)", 1, 120, 60)
     
     with col5:
         rsi_entry = st.number_input("RSI Entry Threshold", value=32, step=1)
