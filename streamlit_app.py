@@ -277,7 +277,12 @@ def main():
         assets = US_ASSETS if market == "US" else INDIAN_ASSETS
     
     with col2:
-        ticker = st.selectbox("Select Asset", assets)
+        selection_mode = st.radio("Stock Selection", ["From List", "Custom"])
+        if selection_mode == "From List":
+            ticker = st.selectbox("Select Asset", assets)
+        else:
+            ticker = st.text_input("Enter Stock Symbol", 
+                help="For US stocks, enter symbol (e.g., AAPL). For Indian stocks, add .NS for NSE (e.g., TCS.NS) or .BO for BSE (e.g., TCS.BO)")
     
     with col3:
         end_date = st.date_input("End Date", date.today())
@@ -288,8 +293,18 @@ def main():
     with col5:
         rsi_entry = st.number_input("RSI Entry Threshold", value=32, step=1)
         rsi_exit = st.number_input("RSI Exit Threshold", value=79, step=1)
+
+    # Validate custom ticker input
+    if selection_mode == "Custom" and ticker:
+        if market == "INDIA" and not (ticker.endswith('.NS') or ticker.endswith('.BO')):
+            st.warning("For Indian stocks, please add .NS (NSE) or .BO (BSE) suffix to the symbol")
+            return
         
     if st.button("Run Analysis"):
+        if not ticker:
+            st.error("Please enter a stock symbol")
+            return
+            
         start_date = pd.to_datetime(end_date) - pd.DateOffset(months=lookback_months)
         
         with st.spinner('Analyzing data...'):
